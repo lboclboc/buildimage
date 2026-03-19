@@ -1,0 +1,12 @@
+images:
+  - directory: "."
+    name: "harbor.mycompany.com/library/test-image"
+    tags:
+      - "tree-{{ treeHash }}"
+      - "latest"
+    labels:
+      - name: com.mydomain.repository
+        value: "{{ repository }}"
+    buildArgs:
+      - name: "USERNAME"
+        value: "root"
