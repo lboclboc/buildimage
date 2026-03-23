@@ -1,12 +1,12 @@
 [project]
 name = "buildimage"
 version = "0.1.0"
-description = "Add your description here"
+description = "Build Docker images for use in Kubernetes deployments"
 readme = "README.md"
 authors = [
     { name = "Lars Berntzon", email = "lars.berntzon@external.atlascopco.com" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "jinja2>=3.1.6",
     "jsonschema>=4.26.0",

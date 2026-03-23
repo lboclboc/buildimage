@@ -1,12 +1,31 @@
 images:
-  - directory: "."
-    name: "harbor.mycompany.com/library/test-image"
+  - name: "harbor.mycompany.com/library/test-image-1"
+    directory: "test-image-1"
     tags:
-      - "tree-{{ treeHash }}"
+      # First tag is used to update deployments.
+      - "tree-{{treeHash}}"
       - "latest"
     labels:
       - name: com.mydomain.repository
-        value: "{{ repository }}"
+        value: "{{repository}}"
+      - name: com.mydomain.commit
+        value: "{{commit}}"
+    buildArgs:
+      - name: "USERNAME"
+        value: "root"
+    deployments:
+      - path: ../deployment/kustomize.yaml
+        match: "newTag: tr.*"
+        replace: "newTag: tree-{treeHash}"
+
+  - name: "harbor.mycompany.com/library/test-image-2"
+    directory: "test-image-2"
+    tags:
+      - "tree-{{treeHash}}"
+      - "latest"
+    labels:
+      - name: com.mydomain.repository
+        value: "{{repository}}"
     buildArgs:
       - name: "USERNAME"
         value: "root"

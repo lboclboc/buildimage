@@ -1,0 +1,74 @@
+# buildimage
+
+Build Docker images for use in Kubernetes deployments.
+
+The script uses a file named `images.yaml` to describe what images to build and what deployments to patch with new tags. Built images will also have some labels with metadata defined. The YAML file can use facts using the Jinja2 template format `{{ name }}`.
+
+## Installation
+
+Install from PyPI:
+
+```bash
+pip install buildimage
+```
+
+## Usage
+
+Run the `buildimage` command in a directory containing an `images.yaml` file:
+
+```bash
+buildimage [OPTIONS] DIRECTORY
+```
+
+### Options
+
+- `--nopush`: Skip pushing built images
+- `--image IMAGE`: Only build named images (can be specified multiple times)
+- `DIRECTORY`: Path to directory containing the `images.yaml` file (default: current directory)
+
+## Configuration
+
+Create an `images.yaml` file in your project root with the following format:
+
+```yaml
+images:
+  - directory: "build-directory"
+    name: "image name"
+    tags:
+      - "tree-{{ treeHash }}"
+    labels:
+      - name: com.mydomain.repository
+        value: "{{ repository }}"
+    buildArgs:
+      - name: "build-arg-name"
+        value: "build-arg-value"
+    deployments:
+      - path: "path/to/deployment.yaml"
+        match: "regex-to-match"
+        replace: "replacement-value"
+```
+
+### Available Facts
+
+The following facts are available for templating in `images.yaml`:
+
+- `{{ branch }}`: Current Git branch
+- `{{ remote }}`: Git remote name
+- `{{ repositoryFull }}`: Full repository URL
+- `{{ repository }}`: Repository URL without user info
+- `{{ commit }}`: Hash for current HEAD commit
+- `{{ topTreeHash }}`: Git tree hash of the top directory
+- `{{ treeHash }}`: Git tree hash of the image directory (per image)
+- `{{ top }}`: Top directory path
+
+## Example
+
+See the `tests/docker/` directory for a complete example with test images and deployment updates.
+
+## License
+
+[Add license information here]
+
+## Contributing
+
+[Add contribution guidelines here]

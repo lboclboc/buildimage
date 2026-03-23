@@ -11,6 +11,8 @@ import subprocess
 import sys
 import yaml
 from jsonschema import validate, ValidationError
+from dataclasses import dataclass, field
+
 
 """
 Build docker images for use in kubernetes deployments.
@@ -26,7 +28,7 @@ images:
       - "tree-{{ treeHash }}"
     labels:
       - name: com.mydomain.repository
-        value: "{{ .repository }}"
+        value: "{{ repository }}"
     buildArgs:
       - name: "build-arg-name"
         value: "build-arg-value"
@@ -99,6 +101,29 @@ SCHEMA = {
                             "required": ["name", "value"],
                         },
                     },
+                    "deployments": {
+                        "description": "Deployments to update",
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "description": "path to file to modify",
+                                    "type": "string",
+                                },
+                                "match": {
+                                    "description": "regular expression to match",
+                                    "type": "string",
+                                },
+                                "replace": {
+                                    "description": "recplavement value",
+                                    "type": "string",
+                                },
+
+                            },
+                            "required": ["path", "match", "replace"],
+                        },
+                    },
                 },
                 "required": ["directory", "name", "tags"],
             },
@@ -108,6 +133,14 @@ SCHEMA = {
     "required": ["images"],
 }
 
+@dataclass
+class Image:
+    name: str  # Basename of image, including host, port, namespace and repo
+    tag: str
+    image_facts: dict[str, str]
+    fullname: str = field(init=False)
+    def __post_init__(self):
+        self.fullname = self.name + ":" + self.tag
 
 class ImageBuilder:
     """Holds the context during the whole build for all images and specs."""
@@ -115,24 +148,29 @@ class ImageBuilder:
         self._top = Path(top)
         self._spec: dict[str, object] | None = None
         self._facts: dict[str, str] | None = dict()
-        self._built_images: list[str] | None = None
         self.get_facts()
 
     @staticmethod
     def command(cmd: list[str]) -> str:
         return subprocess.run(cmd, stdout=subprocess.PIPE, check=True).stdout.decode().strip()
 
+    @staticmethod
+    def get_tree_hash(dir: Path) -> str:
+        dir = f"./{dir}" if not dir.is_absolute() else str(dir)  # Needed since Path strips "./"
+        tree_hash = ImageBuilder.command(["git", "rev-parse", f"HEAD:{dir}/."])
+        dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", f"{dir}/"])
+        return (tree_hash + "-dirty" if dirty else tree_hash, dirty)
+
     def get_facts(self) -> None:
         """calculate various facts that can be used in the images.yaml file"""
         f = self._facts
         f["branch"] = self.command(["git", "branch", "--show-current"])
         f["remote"] = self.command(["git", "config", f"branch.{f['branch']}.remote"])
+        f["commit"] = self.command(["git", "rev-parse", "HEAD"])
         f["repositoryFull"] = self.command(["git", "remote", "get-url", f["remote"]])
         f["repository"] = re.sub(r"//.*@", "//", f["repositoryFull"])  # Drop user info
-        tree_hash = self.command(["git", "rev-parse", "HEAD:./"])
-        f["treeHash"] = tree_hash + "-dirty" if subprocess.run(["git", "diff", "--quiet", "HEAD", "./"]) else tree_hash
-        # FIXME: git-commit also as fact
-        # FIXME:
+        (f["topTreeHash"], _) = self.get_tree_hash(self._top)
+        f["treeHash"] = "{treeHash}"  # This actually needs to be expanded per image rather that globally.
         f["top"] = str(self._top)
 
     def load_spec(self) -> None:
@@ -145,40 +183,78 @@ class ImageBuilder:
 
         validate(instance=self._spec, schema=SCHEMA)
 
-    def build_images(self) -> None:
-        for image in self._spec["images"]:
-            buildargs = []
-            for b in image.get("build-args") or []:
-                buildargs.extend(["--build-arg", f"{b['name']}={b['value']}"])
-
-            labels = []
-            for b in image.get("labels") or []:
-                labels.extend(["--label", f"{b['name']}={b['value']}"])
-
-            self._built_images = []
-            for tag in image.get("tags") or []:
-                self._built_images.append(f"{image['name']}:{tag}")
-            if len(self._built_images) == 0:
-                raise RuntimeError("No tags specified in {IMAGE_YAML_FILE}")
-
-            image_dir = Path(image["directory"])
+    def build_images(self, images_to_build: list[str] = None) -> None:
+        """Builds all images and returns a list of built Image objects."""
+        build_result: dict[str, list[Image]] = dict()
+        for img in self._spec["images"]:
+            if images_to_build and img["name"] not in images_to_build:
+                continue
+            image_dir = Path(img["directory"])
             if not image_dir.is_absolute():
                 image_dir = self._facts["top"] / image_dir
 
-            cmd = ["docker", "build", "-t", self._built_images[0]] + buildargs + labels + [str(image_dir)]
-            logging.info(f"Building {self._built_images[0]} in {image['directory']}")
-            subprocess.run(cmd, check=True)
+            image_facts: dict[str, str] = dict()
+            (image_facts["treeHash"], image_facts["dirty"]) = self.get_tree_hash(image_dir)
 
-            for name in self._built_images[1:]:
-                logging.info(f"Tagging {name}")
-                subprocess.run(["docker", "tag", self._built_images[0], name], check=True)
+            labels = [
+                # This will make the images.yaml file usage traceable from the image.
+                "--label", f"com.github.lboclboc.buildimage.topTreeHash={self._facts['topTreeHash']}",
+            ]
+            for b in img.get("labels") or []:
+                labels.extend(["--label", f"{b['name']}={b['value'].format(**image_facts)}"])
+
+            buildargs = []
+            for b in img.get("buildArgs") or []:
+                buildargs.extend(["--build-arg", f"{b['name']}={b['value'].format(**image_facts)}"])
+
+            image_list: list[Image] = []
+            for tag in img.get("tags") or []:
+                tag = tag.format(**image_facts)
+                i = Image(img["name"], tag, image_facts)
+                if len(image_list) == 0:
+                    cmd = ["docker", "build", "-t", i.fullname] + buildargs + labels + [str(image_dir)]
+                    logging.info(f"Building {i.fullname} in {image_dir}...")
+                    subprocess.run(cmd, check=True)
+                else:
+                    cmd = ["docker", "tag", image_list[0].fullname, i.fullname]
+                    logging.info(f"Tagging {i.fullname}...")
+                    subprocess.run(cmd, check=True)
+
+                image_list.append(i)
+            if len(image_list) == 0:
+                raise RuntimeError(f"No tags specified in {IMAGE_YAML_FILE} for image {img['name']}")
+
+            build_result[img["name"]] = image_list
+
+        if len(build_result) == 0:
+            raise RuntimeError("No images found to build.")
+
+        return build_result
+
+    def update_deployments(self, build_result: dict[str, list[Image]]) -> None:
+        for img in self._spec["images"]:
+            if img["name"] not in build_result:
+                continue
+            i = build_result[img["name"]][0]  # Use first built image data only.
+            for deploy in (img.get("deployments") or []):
+                path = self._top / deploy["path"].format(**i.image_facts)
+                match = deploy["match"].format(**i.image_facts)
+                replace = deploy["replace"].format(**i.image_facts)
+                lines = []
+                with path.open() as fin:
+                    for l in fin:
+                        lines.append(re.sub(match, replace, l))
+
+                with path.open("w") as fout:
+                    for l in lines:
+                        fout.write(l)
 
 
 def get_arguments():
     parser = argparse.ArgumentParser("buildimage")
     parser.add_argument("--nopush", action="store_true", help="Skip pushing built images")
-    parser.add_argument("--image", nargs="*", help="Only build named images, can be specified multiple times")
-    parser.add_argument("directory", nargs="1", help="Path to directory for the images.yaml file", default=".")
+    parser.add_argument("--image", action='append', default=None, help="Only build named images, can be specified multiple times")
+    parser.add_argument("directory", nargs="?", help="Path to directory for the images.yaml file", default=".")
     return parser.parse_args()
 
 
@@ -186,18 +262,18 @@ def main() -> None:
     args = get_arguments()
 
     builder = ImageBuilder(args.directory)
+
     try:
         builder.load_spec()
     except ValidationError as e:
         logging.error(f"Error in yaml-file: {e}")
         sys.exit(1)
 
-    builder.build_images()
-    # FIXME: implement deployments updates.
-    # builder.update_deployments()
+    build_result: dict[str, list[Image]] = builder.build_images(args.image)
+
     if not args.nopush:
-        builder.push_images()
+        for name in build_result:
+            for image in build_result[name]:
+                subprocess.run(["docker", "push", image.fullname], check=True)
 
-
-if __name__ == "__main__":
-    main()
+    builder.update_deployments(build_result)
