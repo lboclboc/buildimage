@@ -1,6 +1,6 @@
 # buildimage
 
-Build Docker images for use in Kubernetes deployments.
+Build Docker images for use in Kubernetes deployments. The build images can be tagged with configurable values. The recomended way is to tag it with the tree hash from the docker folder. This is the way the example below use.
 
 The script uses a file named `images.yaml` to describe what images to build and what deployments to patch with new tags. Built images will also have some labels with metadata defined. The YAML file can use facts using the Jinja2 template format `{{ name }}`.
 
@@ -14,7 +14,7 @@ pip install buildimage
 
 ## Usage
 
-Run the `buildimage` command in a directory containing an `images.yaml` file:
+Run the `buildimage` command in a directory containing an `images.yaml` file or specify the directory as an argument:
 
 ```bash
 buildimage [OPTIONS] DIRECTORY
@@ -65,10 +65,3 @@ The following facts are available for templating in `images.yaml`:
 
 See the `tests/docker/` directory for a complete example with test images and deployment updates.
 
-## License
-
-[Add license information here]
-
-## Contributing
-
-[Add contribution guidelines here]

@@ -1,5 +1,6 @@
 import pytest
 import buildimage
+import buildimage.__main__
 import sys
 import re
 import json
@@ -55,16 +56,16 @@ def test_main():
     arg0 = os.path.join(os.path.dirname(__file__), "../src/buildimage/__init__.py")
     shutil.copy("deployment/kustomize.yaml.org", "deployment/kustomize.yaml")
     sys.argv = [arg0, "--nopush", "docker"]
-    buildimage.main()
+    buildimage.__main__.main()
     assert grep("deployment/kustomize.yaml", "tree-")
 
     shutil.copy("deployment/kustomize.yaml.org", "deployment/kustomize.yaml")
     sys.argv = [arg0, "--image", "harbor.mycompany.com/library/test-image-2", "--nopush", "docker"]
-    buildimage.main()
+    buildimage.__main__.main()
     assert not grep("deployment/kustomize.yaml", "tree-")
 
     shutil.copy("deployment/kustomize.yaml.org", "deployment/kustomize.yaml")
     sys.argv = [arg0, "--image", "harbor.mycompany.com/library/test-image-1", "docker"]
 
     with pytest.raises(subprocess.CalledProcessError):
-        buildimage.main()
+        buildimage.__main__.main()
