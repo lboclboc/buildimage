@@ -12,7 +12,7 @@ import yaml
 from jsonschema import validate, ValidationError
 from dataclasses import dataclass, field
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 """
 Build docker images for use in kubernetes deployments.
