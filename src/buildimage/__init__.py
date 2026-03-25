@@ -12,7 +12,7 @@ import yaml
 from jsonschema import validate, ValidationError
 from dataclasses import dataclass, field
 
-__version__ = "0.0.1"
+__version__ = "1.2.0"
 
 """
 Build docker images for use in kubernetes deployments.
@@ -51,6 +51,10 @@ SCHEMA = {
                 "type": "object",
                 "properties": {
                     "directory": {
+                        "description": "sub-director below this file where image Dockerfile is located",
+                        "type": "string",
+                    },
+                    "dockerFile": {
                         "description": "sub-director below this file where image Dockerfile is located",
                         "type": "string",
                     },
@@ -193,6 +197,8 @@ class ImageBuilder:
             if not image_dir.is_absolute():
                 image_dir = self._facts["top"] / image_dir
 
+            docker_file = image_dir / (img.get("dockerFile") or "Dockerfile")
+
             image_facts: dict[str, str] = dict()
             (image_facts["treeHash"], image_facts["dirty"]) = self.get_tree_hash(image_dir)
 
@@ -212,12 +218,16 @@ class ImageBuilder:
                 tag = tag.format(**image_facts)
                 i = Image(img["name"], tag, image_facts)
                 if len(image_list) == 0:
-                    cmd = ["docker", "build", "-t", i.fullname] + buildargs + labels + [str(image_dir)]
-                    logging.info(f"Building {i.fullname} in {image_dir}...")
+                    cmd = ["docker", "build", "-t", i.fullname]
+                    cmd += buildargs
+                    cmd += labels
+                    cmd += ["-f", str(docker_file)]
+                    cmd += [str(image_dir)]
+                    logging.debug(f"Building {i.fullname} in {image_dir} with: {' '.join(cmd)}")
                     subprocess.run(cmd, check=True)
                 else:
                     cmd = ["docker", "tag", image_list[0].fullname, i.fullname]
-                    logging.info(f"Tagging {i.fullname}...")
+                    logging.debug(f"Tagging {i.fullname} with: {' '.join(cmd)}")
                     subprocess.run(cmd, check=True)
 
                 image_list.append(i)

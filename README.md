@@ -32,13 +32,14 @@ Create an `images.yaml` file in your project root with the following format:
 
 ```yaml
 images:
-  - directory: "build-directory"
-    name: "image name"
-    tags:
-      - "tree-{{ treeHash }}"
+  - name: "image name"               (required)
+    directory: "build-directory"     (required)
+    dockerFile: "Dockerfile"
+    tags:                            (required)
+      - "tree-{{treeHash}}"
     labels:
       - name: com.mydomain.repository
-        value: "{{ repository }}"
+        value: "{{repository}}"
     buildArgs:
       - name: "build-arg-name"
         value: "build-arg-value"

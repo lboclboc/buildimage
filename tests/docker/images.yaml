@@ -1,6 +1,7 @@
 images:
   - name: "harbor.mycompany.com/library/test-image-1"
     directory: "test-image-1"
+    dockerFile: "Dockerfile"
     tags:
       # First tag is used to update deployments.
       - "tree-{{treeHash}}"
