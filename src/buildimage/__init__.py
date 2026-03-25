@@ -8,11 +8,12 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from glob import glob
 import yaml
 from jsonschema import validate, ValidationError
 from dataclasses import dataclass, field
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 """
 Build docker images for use in kubernetes deployments.
@@ -162,7 +163,8 @@ class ImageBuilder:
     def get_tree_hash(dir: Path) -> str:
         dir = f"./{dir}" if not dir.is_absolute() else str(dir)  # Needed since Path strips "./"
         tree_hash = ImageBuilder.command(["git", "rev-parse", f"HEAD:{dir}/."])
-        dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", f"{dir}/"])
+        dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", f"{dir}/"]).returncode != 0
+        logging.debug(f"Image dir {dir} is dirty")
         return (tree_hash + "-dirty" if dirty else tree_hash, dirty)
 
     def get_facts(self) -> None:
@@ -176,6 +178,7 @@ class ImageBuilder:
         (f["topTreeHash"], _) = self.get_tree_hash(self._top)
         f["treeHash"] = "{treeHash}"  # This actually needs to be expanded per image rather that globally.
         f["top"] = str(self._top)
+        f["login"] = os.getlogin()
 
     def load_spec(self) -> None:
         env = Environment(loader=FileSystemLoader("."))
@@ -187,7 +190,7 @@ class ImageBuilder:
 
         validate(instance=self._spec, schema=SCHEMA)
 
-    def build_images(self, images_to_build: list[str] = None) -> None:
+    def build_images(self, images_to_build: list[str] = None, quiet: bool = True) -> None:
         """Builds all images and returns a list of built Image objects."""
         build_result: dict[str, list[Image]] = dict()
         for img in self._spec["images"]:
@@ -222,6 +225,8 @@ class ImageBuilder:
                     cmd += buildargs
                     cmd += labels
                     cmd += ["-f", str(docker_file)]
+                    if quiet:
+                        cmd += ["--quiet"]
                     cmd += [str(image_dir)]
                     logging.debug(f"Building {i.fullname} in {image_dir} with: {' '.join(cmd)}")
                     subprocess.run(cmd, check=True)
@@ -241,21 +246,35 @@ class ImageBuilder:
 
         return build_result
 
-    def update_deployments(self, build_result: dict[str, list[Image]]) -> None:
+    def update_deployments(self, build_result: dict[str, list[Image]]) -> set[str]:
+        modified_files: set[str] = set()
         for img in self._spec["images"]:
             if img["name"] not in build_result:
                 continue
+
+            logging.debug(f"updating deployment for {img['name']}")
             i = build_result[img["name"]][0]  # Use first built image data only.
             for deploy in (img.get("deployments") or []):
-                path = self._top / deploy["path"].format(**i.image_facts)
-                match = deploy["match"].format(**i.image_facts)
+                paths = glob(str(self._top / deploy["path"].format(**i.image_facts)))
+                match = re.compile(deploy["match"].format(**i.image_facts))
                 replace = deploy["replace"].format(**i.image_facts)
-                lines = []
-                with path.open() as fin:
-                    for l in fin:
-                        lines.append(re.sub(match, replace, l))
+                for path in paths:
+                    lines = []
+                    with open(path) as fin:
+                        for line in fin:
+                            try:
+                                new_line = match.sub(replace, line)
+                                lines.append(new_line)
+                                if new_line != line:
+                                    modified_files.add(path)
+                            except re.error as e:
+                                # FIXME
+                                print(e, type(e))
+                                print(f"{path=}, {l=}, {replace=}")
+                                sys.exit(1)
 
-                with path.open("w") as fout:
-                    for l in lines:
-                        fout.write(l)
+                    with open(path, "w") as fout:
+                        for l in lines:
+                            fout.write(l)
+        return modified_files
 

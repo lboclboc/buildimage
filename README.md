@@ -53,16 +53,16 @@ images:
 
 The following facts are available for templating in `images.yaml`:
 
-- `{{ branch }}`: Current Git branch
-- `{{ remote }}`: Git remote name
-- `{{ repositoryFull }}`: Full repository URL
-- `{{ repository }}`: Repository URL without user info
-- `{{ commit }}`: Hash for current HEAD commit
-- `{{ topTreeHash }}`: Git tree hash of the top directory
-- `{{ treeHash }}`: Git tree hash of the image directory (per image)
-- `{{ top }}`: Top directory path
+- `{{branch}}`: Current Git branch
+- `{{remote}}`: Git remote name
+- `{{repositoryFull}}`: Full repository URL
+- `{{repository}}`: Repository URL without user info
+- `{{commit}}`: Hash for current HEAD commit
+- `{{topTreeHash}}`: Git tree hash of the top directory
+- `{{treeHash}}`: Git tree hash of the image directory (per image)
+- `{{login}}`: Currently logged in used performing build
+- `{{top}}`: Top directory path
 
 ## Example
 
 See the `tests/docker/` directory for a complete example with test images and deployment updates.
-
