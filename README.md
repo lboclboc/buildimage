@@ -1,6 +1,6 @@
 # buildimage
 
-Build Docker images for use in Kubernetes deployments. The build images can be tagged with configurable values. The recomended way is to tag it with the tree hash from the docker folder. This is the way the example below use.
+Build Docker images from git source for use in Kubernetes deployments. The build images can be tagged with configurable values. The recomended way is to tag it with the tree hash from the docker folder. This is the way the example below use.
 
 The script uses a file named `images.yaml` to describe what images to build and what deployments to patch with new tags. Built images will also have some labels with metadata defined. The YAML file can use facts using the Jinja2 template format `{{ name }}`.
 
@@ -17,14 +17,14 @@ pip install buildimage
 Run the `buildimage` command in a directory containing an `images.yaml` file or specify the directory as an argument:
 
 ```bash
-buildimage [OPTIONS] DIRECTORY
+buildimage [OPTIONS] IMAGES_FILE
 ```
 
 ### Options
 
 - `--nopush`: Skip pushing built images
 - `--image IMAGE`: Only build named images (can be specified multiple times)
-- `DIRECTORY`: Path to directory containing the `images.yaml` file (default: current directory)
+- `IMAGES_FILE`: Path to the `images.yaml` file (default: ./images.yaml)
 
 ## Configuration
 
@@ -36,7 +36,8 @@ images:
     directory: "build-directory"     (required)
     dockerFile: "Dockerfile"
     tags:                            (required)
-      - "tree-{{treeHash}}"
+      - "tree-{{treeHash}}"          (first tag is later available as {{tag}})
+      - "latest"
     labels:
       - name: com.mydomain.repository
         value: "{{repository}}"
@@ -46,23 +47,43 @@ images:
     deployments:
       - path: "path/to/deployment.yaml"
         match: "regex-to-match"
-        replace: "replacement-value"
+        replace: "{{tag}}"           (default value)
+      - kustomize: "../development/kustomize.yaml"
+        name: "{{name}}"             (default value)
+        newTag: "{{tag}}"            (default value)
+
 ```
 
-### Available Facts
+## Available Facts
 
 The following facts are available for templating in `images.yaml`:
 
 - `{{branch}}`: Current Git branch
+- `{{commit}}`: Hash for current HEAD commit
+- `{{login}}`: Currently logged in used performing build
+- `{{name}}`: Name of current image being built (without tags)
 - `{{remote}}`: Git remote name
 - `{{repositoryFull}}`: Full repository URL
 - `{{repository}}`: Repository URL without user info
-- `{{commit}}`: Hash for current HEAD commit
+- `{{tag}}`: Tag used for first built image tag (same as tag0. also tag[1..3] are available)
+- `{{top}}`: Top directory path
 - `{{topTreeHash}}`: Git tree hash of the top directory
 - `{{treeHash}}`: Git tree hash of the image directory (per image)
-- `{{login}}`: Currently logged in used performing build
-- `{{top}}`: Top directory path
+
+## Labels
+
+Except the custom labels defined in the images.yaml file following standard labels will be added for the image:
+
+- `org.opencontainers.image.topTreeHash`
+- `org.opencontainers.image.source`
+- `org.opencontainers.image.revision`
+- `org.opencontainers.image.user`
+- `org.opencontainers.image.buildimage`
 
 ## Example
 
 See the `tests/docker/` directory for a complete example with test images and deployment updates.
+
+## Todo
+
+The deployments should be able to use {{tags[0]}} as fact

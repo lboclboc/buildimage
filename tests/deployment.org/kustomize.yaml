@@ -1,5 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+# Some comments that should not disappear.
 
 namespace: development
 
@@ -10,5 +11,5 @@ resources:
 - mydeploy-serviceaccount.yaml
 
 images:
-- name: harbor.mycompany.com/library/test-image-1
-  newTag: trxx-1234
+- name: harbor.mycompany.com/library/test-image-3
+  newTag: tree-orig

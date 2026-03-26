@@ -1,0 +1,4 @@
+# Example of helm value files
+
+server:
+  image: "harbor.mycompany.com/library/test-image-1:tree-orig"

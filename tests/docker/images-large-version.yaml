@@ -1,9 +1,10 @@
-schemaVersion: "1.5.0"
+schemaVersion: "999.999.0"
 images:
   - name: "harbor.mycompany.com/library/test-image-1"
     directory: "test-image-1"
     dockerFile: "Dockerfile"
     tags:
+      # First tag is used to update deployments.
       - "tree-{{treeHash}}"
       - "latest"
     labels:
@@ -17,9 +18,9 @@ images:
       - name: "USERNAME"
         value: "root"
     deployments:
-      - path: ../deployment/values.yaml
-        match: '"{{name}}:tree-.*"'
-        replace: '"{{name}}:{{tag}}"'
+      - path: ../deployment/kustomize.yaml
+        match: "newTag: tr.*"
+        replace: "newTag: tree-{{treeHash}}"
 
   - name: "harbor.mycompany.com/library/test-image-2"
     directory: "test-image-2"
@@ -39,4 +40,5 @@ images:
       - "tree-{{treeHash}}"
     deployments:
       - kustomize: ../deployment/kustomize.yaml
-        newTag: "{{tag}}"
+        newTag: "tree-{{treeHash}}"
+

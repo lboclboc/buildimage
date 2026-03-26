@@ -1,19 +1,20 @@
 #!/usr/bin/env python
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from glob import glob
 import io
 from jinja2 import Environment, FileSystemLoader
+from jsonschema import validate, ValidationError
 import logging
 import os
+from packaging.version import Version
 from pathlib import Path
 import re
 import subprocess
 import sys
-from glob import glob
 import yaml
-from jsonschema import validate, ValidationError
-from dataclasses import dataclass, field
+from .schema import SCHEMA
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 """
 Build docker images for use in kubernetes deployments.
@@ -36,121 +37,21 @@ images:
   . . .
 """
 
-IMAGE_YAML_FILE = "images.yaml"
-
-SCHEMA = {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://github.com/lboclboc/buildimage.git", # FIXME: correct to proper url.
-    "title": "buildimage",
-    "description": "Instructions for how to build images in kubernetes",
-    "type": "object",
-    "properties": {
-        "images": {
-            "description": "List of images to build",
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "directory": {
-                        "description": "sub-director below this file where image Dockerfile is located",
-                        "type": "string",
-                    },
-                    "dockerFile": {
-                        "description": "sub-director below this file where image Dockerfile is located",
-                        "type": "string",
-                    },
-                    "name": {
-                        "description": "name of image (not including the :tag)",
-                        "type": "string",
-                    },
-                    "tags": {
-                        "description": "list of tags to use. Example {{ treeHash }}",
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                        },
-                    },
-                    "labels": {
-                        "description": "docker image labels",
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "name": {
-                                    "description": "name of label, example com.mycompany.repository",
-                                    "type": "string",
-                                },
-                                "value": {
-                                    "description": "value of label, example {{ repository }}",
-                                    "type": "string",
-                                },
-                            },
-                            "required": ["name", "value"],
-                        },
-                    },
-                    "buildArgs": {
-                        "description": "Build arguments for image",
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "name": {
-                                    "description": "build arg. Example BASE_IMAGE",
-                                    "type": "string",
-                                },
-                                "value": {
-                                    "description": "value of build arg, example 'busybox'",
-                                    "type": "string",
-                                },
-                            },
-                            "required": ["name", "value"],
-                        },
-                    },
-                    "deployments": {
-                        "description": "Deployments to update",
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "path": {
-                                    "description": "path to file to modify",
-                                    "type": "string",
-                                },
-                                "match": {
-                                    "description": "regular expression to match",
-                                    "type": "string",
-                                },
-                                "replace": {
-                                    "description": "recplavement value",
-                                    "type": "string",
-                                },
-
-                            },
-                            "required": ["path", "match", "replace"],
-                        },
-                    },
-                },
-                "required": ["directory", "name", "tags"],
-            },
-            "minItems": 1
-        },
-    },
-    "required": ["images"],
-}
 
 @dataclass
 class Image:
     name: str  # Basename of image, including host, port, namespace and repo
     tag: str
-    image_facts: dict[str, str]
+    facts: dict[str, str]
     fullname: str = field(init=False)
     def __post_init__(self):
         self.fullname = self.name + ":" + self.tag
 
 class ImageBuilder:
     """Holds the context during the whole build for all images and specs."""
-    def __init__(self, top: str) -> None:
-        self._top = Path(top)
+    def __init__(self, images_file:str = "images.yaml") -> None:
+        self._images_file = images_file
+        self._top = Path(os.path.dirname(images_file))
         self._spec: dict[str, object] | None = None
         self._facts: dict[str, str] | None = dict()
         self.get_facts()
@@ -176,19 +77,29 @@ class ImageBuilder:
         f["repositoryFull"] = self.command(["git", "remote", "get-url", f["remote"]])
         f["repository"] = re.sub(r"//.*@", "//", f["repositoryFull"])  # Drop user info
         (f["topTreeHash"], _) = self.get_tree_hash(self._top)
-        f["treeHash"] = "{treeHash}"  # This actually needs to be expanded per image rather that globally.
         f["top"] = str(self._top)
         f["login"] = os.getlogin()
+        # Theese needs to be expanded per image at a later stage:
+        f["treeHash"] = "{treeHash}"
+        f["name"] = "{name}"
+        f["tag"] = "{tag}"
+        f["tag0"] = "{tag}"
+        f["tag1"] = "{tag1}"
+        f["tag2"] = "{tag2}"
+        f["tag3"] = "{tag3}"
 
     def load_spec(self) -> None:
         env = Environment(loader=FileSystemLoader("."))
-        template = env.get_template(str(self._top / IMAGE_YAML_FILE))
+        template = env.get_template(str(self._images_file))
         rendered = template.render(**self._facts)
 
         with io.StringIO(rendered) as fin:
             self._spec: dict = yaml.safe_load(fin)
 
         validate(instance=self._spec, schema=SCHEMA)
+        if "schemaVersion" in self._spec:
+            if Version(self._spec["schemaVersion"]) > Version(__version__):
+                raise ValueError("You need version {self._spec['schemaVersion']} of buildimage")
 
     def build_images(self, images_to_build: list[str] = None, quiet: bool = True) -> None:
         """Builds all images and returns a list of built Image objects."""
@@ -196,6 +107,7 @@ class ImageBuilder:
         for img in self._spec["images"]:
             if images_to_build and img["name"] not in images_to_build:
                 continue
+
             image_dir = Path(img["directory"])
             if not image_dir.is_absolute():
                 image_dir = self._facts["top"] / image_dir
@@ -204,10 +116,15 @@ class ImageBuilder:
 
             image_facts: dict[str, str] = dict()
             (image_facts["treeHash"], image_facts["dirty"]) = self.get_tree_hash(image_dir)
+            image_facts["name"] = img["name"]
 
             labels = [
                 # This will make the images.yaml file usage traceable from the image.
-                "--label", f"com.github.lboclboc.buildimage.topTreeHash={self._facts['topTreeHash']}",
+                "--label", f"org.opencontainers.image.topTreeHash={self._facts['topTreeHash']}",
+                "--label", f"org.opencontainers.image.source={self._facts['repository']}",
+                "--label", f"org.opencontainers.image.revision={self._facts['commit']}",
+                "--label", f"org.opencontainers.image.user={self._facts['login']}",
+                "--label", f"org.opencontainers.image.buildimage={__version__}",
             ]
             for b in img.get("labels") or []:
                 labels.extend(["--label", f"{b['name']}={b['value'].format(**image_facts)}"])
@@ -217,8 +134,9 @@ class ImageBuilder:
                 buildargs.extend(["--build-arg", f"{b['name']}={b['value'].format(**image_facts)}"])
 
             image_list: list[Image] = []
-            for tag in img.get("tags") or []:
+            for tag_no, tag in enumerate(img["tags"]):
                 tag = tag.format(**image_facts)
+                image_facts[f"tag{tag_no}"] = tag
                 i = Image(img["name"], tag, image_facts)
                 if len(image_list) == 0:
                     cmd = ["docker", "build", "-t", i.fullname]
@@ -236,8 +154,8 @@ class ImageBuilder:
                     subprocess.run(cmd, check=True)
 
                 image_list.append(i)
-            if len(image_list) == 0:
-                raise RuntimeError(f"No tags specified in {IMAGE_YAML_FILE} for image {img['name']}")
+
+            image_facts[f"tag"] = image_facts[f"tag0"]
 
             build_result[img["name"]] = image_list
 
@@ -247,6 +165,7 @@ class ImageBuilder:
         return build_result
 
     def update_deployments(self, build_result: dict[str, list[Image]]) -> set[str]:
+        """Update deployments with new tags."""
         modified_files: set[str] = set()
         for img in self._spec["images"]:
             if img["name"] not in build_result:
@@ -254,27 +173,61 @@ class ImageBuilder:
 
             logging.debug(f"updating deployment for {img['name']}")
             i = build_result[img["name"]][0]  # Use first built image data only.
-            for deploy in (img.get("deployments") or []):
-                paths = glob(str(self._top / deploy["path"].format(**i.image_facts)))
-                match = re.compile(deploy["match"].format(**i.image_facts))
-                replace = deploy["replace"].format(**i.image_facts)
-                for path in paths:
-                    lines = []
-                    with open(path) as fin:
-                        for line in fin:
-                            try:
-                                new_line = match.sub(replace, line)
-                                lines.append(new_line)
-                                if new_line != line:
-                                    modified_files.add(path)
-                            except re.error as e:
-                                # FIXME
-                                print(e, type(e))
-                                print(f"{path=}, {l=}, {replace=}")
-                                sys.exit(1)
+            for deployment in (img.get("deployments") or []):
+                if "path" in deployment:
+                    modified_files.update(self.update_file_deployment(deployment, i.facts))
+                elif "kustomize" in deployment:
+                    modified_files.update(self.update_kustomize_deployment(deployment, i.facts))
 
-                    with open(path, "w") as fout:
-                        for l in lines:
-                            fout.write(l)
         return modified_files
 
+    def update_file_deployment(self, deployment: dict, facts: dict[str, str]) -> set:
+        """Simple sed style patching of a file."""
+        paths = glob(str(self._top / deployment["path"].format(**facts)))
+        match = re.compile(deployment["match"].format(**facts))
+        replace = (deployment.get("replace") or "{tag}").format(**facts)
+        modified_files: set[str] = set()
+
+        for path in paths:
+            lines = []
+            with open(path) as fin:
+                for line in fin:
+                    new_line = match.sub(replace, line)
+                    lines.append(new_line)
+                    if new_line != line:
+                        modified_files.add(path)
+
+            with open(path, "w") as fout:
+                for l in lines:
+                    fout.write(l)
+        return modified_files
+
+    def update_kustomize_deployment(self, deployment: dict, facts: dict[str, str]) -> set:
+        from ruamel.yaml import YAML
+        modified = False
+        yaml = YAML()
+        yaml.preserve_quotes = True  # optional, keeps quotes
+
+        kustomize_file = Path(deployment["kustomize"])
+        if not kustomize_file.is_absolute():
+            kustomize_file = self._top / kustomize_file
+
+        with kustomize_file.open() as f:
+            kustomize_data = yaml.load(f)
+
+        # Modify a specific value
+        image_name = deployment.get("name") or facts["name"]
+        for kustomize_image in kustomize_data["images"]:
+            if kustomize_image["name"] == image_name:
+                raw_tag = deployment.get("newTag") or "{tag}"
+                old_tag = kustomize_image["newTag"]
+                kustomize_image["newTag"] = raw_tag.format(**facts)
+                modified = (old_tag != kustomize_image["newTag"])
+                break
+        else:
+            raise RuntimeError(f"Could not find image {image_name} in {kustomize_file}")
+
+        with  kustomize_file.open("w") as f:
+            yaml.dump(kustomize_data, f)
+
+        return {deployment["kustomize"]} if modified else set()

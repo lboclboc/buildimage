@@ -4,6 +4,7 @@ from buildimage import ImageBuilder
 from jsonschema import ValidationError
 import logging
 import subprocess
+import sys
 
 
 def get_arguments():
@@ -11,7 +12,7 @@ def get_arguments():
     parser.add_argument("--debug", action="store_true", help="Debug the buildimage script")
     parser.add_argument("--nopush", action="store_true", help="Skip pushing built images")
     parser.add_argument("--image", action='append', default=None, help="Only build named images, can be specified multiple times")
-    parser.add_argument("directory", nargs="?", help="Path to directory for the images.yaml file", default=".")
+    parser.add_argument("images_file", nargs="?", help="Path to the images.yaml file", default="images.yaml")
     return parser.parse_args()
 
 
@@ -22,7 +23,7 @@ def main() -> None:
         logging.basicConfig(level=logging.DEBUG)
         quiet = False
 
-    builder = ImageBuilder(args.directory)
+    builder = ImageBuilder(args.images_file)
 
     try:
         builder.load_spec()
@@ -45,10 +46,13 @@ def main() -> None:
     modified_files = builder.update_deployments(build_result)
 
     # Reporting
+    dirty = False
     if len(build_result) != 0:
         print("Built images:")
         for name, images in build_result.items():
             for image in images:
+                if image.facts["dirty"]:
+                    dirty = True
                 print(f"  {image.fullname}")
 
     if modified_files:
@@ -56,3 +60,6 @@ def main() -> None:
         for file in modified_files:
             print(f"  {file}")
         print("Consider git commit --amend for those")
+
+    if dirty:
+        print("\nWarning, images are dirty. Not all files have been commited to git.")
