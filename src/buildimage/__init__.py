@@ -14,7 +14,7 @@ import sys
 import yaml
 from .schema import SCHEMA
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 """
 Build docker images for use in kubernetes deployments.
@@ -63,8 +63,8 @@ class ImageBuilder:
     @staticmethod
     def get_tree_hash(dir: Path) -> str:
         dir = f"./{dir}" if not dir.is_absolute() else str(dir)  # Needed since Path strips "./"
-        tree_hash = ImageBuilder.command(["git", "rev-parse", f"HEAD:{dir}/."])
-        dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", f"{dir}/"]).returncode != 0
+        tree_hash = ImageBuilder.command(["git", "-C", dir, "rev-parse", "HEAD:./"])
+        dirty = subprocess.run(["git", "-C", dir, "diff", "--quiet", "HEAD", "./"]).returncode != 0
         logging.debug(f"Image dir {dir} is dirty")
         return (tree_hash + "-dirty" if dirty else tree_hash, dirty)
 

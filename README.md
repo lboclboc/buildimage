@@ -1,6 +1,8 @@
 # buildimage
 
-Build Docker images from git source for use in Kubernetes deployments. The build images can be tagged with configurable values. The recomended way is to tag it with the tree hash from the docker folder. This is the way the example below use.
+Build Docker images from git source for use in Kubernetes deployments. The build images can be tagged with configurable values. The recomended way is to tag it with the tree hash for the docker folder. This is the way the example below use.
+
+By using the tree-hash the source code for building the image is traceable and you can create one complete commit for a change. If using commit hash, two commits is needed. One for the image change and one follow up for the deployment change (kustomize/helm/yaml).
 
 The script uses a file named `images.yaml` to describe what images to build and what deployments to patch with new tags. Built images will also have some labels with metadata defined. The YAML file can use facts using the Jinja2 template format `{{ name }}`.
 
@@ -34,7 +36,7 @@ Create an `images.yaml` file in your project root with the following format:
 images:
   - name: "image name"               (required)
     directory: "build-directory"     (required)
-    dockerFile: "Dockerfile"
+    dockerFile: "Dockerfile"         (relative to directory}
     tags:                            (required)
       - "tree-{{treeHash}}"          (first tag is later available as {{tag}})
       - "latest"
@@ -83,7 +85,3 @@ Except the custom labels defined in the images.yaml file following standard labe
 ## Example
 
 See the `tests/docker/` directory for a complete example with test images and deployment updates.
-
-## Todo
-
-The deployments should be able to use {{tags[0]}} as fact
