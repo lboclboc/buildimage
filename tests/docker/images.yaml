@@ -40,3 +40,27 @@ images:
     deployments:
       - kustomize: ../deployment/kustomize.yaml
         newTag: "{{tag}}"
+
+  - name: "harbor.mycompany.com/library/test-image-no-deploy-match"
+    directory: "test-image-3"
+    tags:
+      - "tree-{{treeHash}}"
+    deployments:
+      - path: ../deployment/values.yaml
+        match: '"{{name}}:nope-.*"'
+        replace: '"{{name}}:{{tag}}"'
+
+  - name: "harbor.mycompany.com/library/test-image-no-kustomize"
+    directory: "test-image-3"
+    tags:
+      - "tree-{{treeHash}}"
+    deployments:
+      - kustomize: ../deployment/kustomize.yaml
+        name: No-such-image
+        newTag: "{{tag}}"
+
+  - name: "harbor.mycompany.com/library/test-image-with-target"
+    directory: "test-image-3"
+    tags:
+      - "tree-{{treeHash}}"
+    target: "base"

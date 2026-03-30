@@ -1,4 +1,4 @@
-
+# Description: https://json-schema.org/
 SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://github.com/lboclboc/buildimage.git", # FIXME: correct to proper url.
@@ -26,6 +26,10 @@ SCHEMA = {
                     },
                     "dockerFile": {
                         "description": "sub-director below this file where image Dockerfile is located",
+                        "type": "string",
+                    },
+                    "target": {
+                        "description": "target image inside Dockerfile",
                         "type": "string",
                     },
                     "name": {

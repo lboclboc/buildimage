@@ -14,7 +14,7 @@ import sys
 import yaml
 from .schema import SCHEMA
 
-__version__ = "1.6.0"
+__version__ = "1.7.0"
 
 """
 Build docker images for use in kubernetes deployments.
@@ -129,6 +129,9 @@ class ImageBuilder:
             for b in img.get("labels") or []:
                 labels.extend(["--label", f"{b['name']}={b['value'].format(**image_facts)}"])
 
+            target = img.get("target")
+            target_flags = ["--target", target] if target else []
+
             buildargs = []
             for b in img.get("buildArgs") or []:
                 buildargs.extend(["--build-arg", f"{b['name']}={b['value'].format(**image_facts)}"])
@@ -142,6 +145,7 @@ class ImageBuilder:
                     cmd = ["docker", "build", "-t", i.fullname]
                     cmd += buildargs
                     cmd += labels
+                    cmd += target_flags
                     cmd += ["-f", str(docker_file)]
                     if quiet:
                         cmd += ["--quiet"]
@@ -190,12 +194,17 @@ class ImageBuilder:
 
         for path in paths:
             lines = []
+            found_match = False
             with open(path) as fin:
                 for line in fin:
+                    if match.search(line):
+                        found_match = True
                     new_line = match.sub(replace, line)
                     lines.append(new_line)
                     if new_line != line:
                         modified_files.add(path)
+            if not found_match:
+                raise RuntimeError(f"Could not find {deployment['match']} in {path}")
 
             with open(path, "w") as fout:
                 for l in lines:

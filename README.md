@@ -36,7 +36,8 @@ Create an `images.yaml` file in your project root with the following format:
 images:
   - name: "image name"               (required)
     directory: "build-directory"     (required)
-    dockerFile: "Dockerfile"         (relative to directory}
+    dockerFile: "Dockerfile"         (relative to directory)
+    target: "docker-file-target"     (default is none)
     tags:                            (required)
       - "tree-{{treeHash}}"          (first tag is later available as {{tag}})
       - "latest"
@@ -68,13 +69,13 @@ The following facts are available for templating in `images.yaml`:
 - `{{repositoryFull}}`: Full repository URL
 - `{{repository}}`: Repository URL without user info
 - `{{tag}}`: Tag used for first built image tag (same as tag0. also tag[1..3] are available)
-- `{{top}}`: Top directory path
+- `{{top}}`: Top directory path (directory for this images.yaml file)
 - `{{topTreeHash}}`: Git tree hash of the top directory
 - `{{treeHash}}`: Git tree hash of the image directory (per image)
 
 ## Labels
 
-Except the custom labels defined in the images.yaml file following standard labels will be added for the image:
+Except the custom labels defined in the images.yaml file following labels will be added for the image:
 
 - `org.opencontainers.image.topTreeHash`
 - `org.opencontainers.image.source`
@@ -85,3 +86,7 @@ Except the custom labels defined in the images.yaml file following standard labe
 ## Example
 
 See the `tests/docker/` directory for a complete example with test images and deployment updates.
+
+## TODO
+
+- Add org.opencontainers.image.base.digest and org.opencontainers.image.base.name labels, see https://github.com/opencontainers/image-spec/blob/main/annotations.md

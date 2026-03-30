@@ -67,6 +67,26 @@ def test_version_check():
     with pytest.raises(ValueError):
         builder.load_spec()
 
+def test_deployment_pattern_not_found(deployment):
+    builder = buildimage.ImageBuilder("./docker/images.yaml")
+    builder.load_spec()
+    build_result = builder.build_images(["harbor.mycompany.com/library/test-image-no-deploy-match"])
+    with pytest.raises(RuntimeError):
+        builder.update_deployments(build_result)
+
+def test_kustomize_not_found(deployment):
+    builder = buildimage.ImageBuilder("./docker/images.yaml")
+    builder.load_spec()
+    build_result = builder.build_images(["harbor.mycompany.com/library/test-image-no-kustomize"])
+    with pytest.raises(RuntimeError):
+        builder.update_deployments(build_result)
+
+def test_target(deployment):
+    builder = buildimage.ImageBuilder("./docker/images.yaml")
+    builder.load_spec()
+    build_result = builder.build_images(["harbor.mycompany.com/library/test-image-with-target"])
+    builder.update_deployments(build_result)
+
 def test_main(deployment):
     arg0 = os.path.join(os.path.dirname(__file__), "../src/buildimage/__init__.py")
     sys.argv = [arg0, "--nopush", "--image", "harbor.mycompany.com/library/test-image-1", "docker/images.yaml"]
