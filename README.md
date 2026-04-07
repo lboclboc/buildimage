@@ -89,4 +89,9 @@ See the `tests/docker/` directory for a complete example with test images and de
 
 ## TODO
 
-- Add org.opencontainers.image.base.digest and org.opencontainers.image.base.name labels, see https://github.com/opencontainers/image-spec/blob/main/annotations.md
+- Add labels:
+  - org.opencontainers.image.base.digest
+  - org.opencontainers.image.base.name
+  - org.opencontainers.image.created
+  see https://github.com/opencontainers/image-spec/blob/main/annotations.md
+
