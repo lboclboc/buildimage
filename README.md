@@ -35,7 +35,7 @@ Create an `images.yaml` file in your project root with the following format:
 ```yaml
 images:
   - name: "image name"               (required)
-    directory: "build-directory"     (required)
+    directory: "build-directory"     (required, relative to this images file)
     dockerFile: "Dockerfile"         (relative to directory)
     target: "docker-file-target"     (default is none)
     tags:                            (required)
@@ -63,7 +63,7 @@ The following facts are available for templating in `images.yaml`:
 
 - `{{branch}}`: Current Git branch
 - `{{commit}}`: Hash for current HEAD commit
-- `{{login}}`: Currently logged in used performing build
+- `{{login}}`: Currently logged in user performing build
 - `{{name}}`: Name of current image being built (without tags)
 - `{{remote}}`: Git remote name
 - `{{repositoryFull}}`: Full repository URL
@@ -92,6 +92,11 @@ See the `tests/docker/` directory for a complete example with test images and de
 - Add labels:
   - org.opencontainers.image.base.digest
   - org.opencontainers.image.base.name
-  - org.opencontainers.image.created
-  see https://github.com/opencontainers/image-spec/blob/main/annotations.md
+    see https://github.com/opencontainers/image-spec/blob/main/annotations.md
+
+## Make release
+
+- bumpver update --minor
+- uv build
+- uv publish
 

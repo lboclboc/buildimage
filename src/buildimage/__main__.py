@@ -63,3 +63,7 @@ def main() -> None:
 
     if dirty:
         print("\nWarning, images are dirty. Not all files have been commited to git.")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

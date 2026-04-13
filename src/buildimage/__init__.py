@@ -1,18 +1,19 @@
 #!/usr/bin/env python
 from dataclasses import dataclass, field
+from datetime import datetime
 from glob import glob
-import io
 from jinja2 import Environment, FileSystemLoader
 from jsonschema import validate, ValidationError
-import logging
-import os
 from packaging.version import Version
 from pathlib import Path
+from .schema import SCHEMA
+import io
+import logging
+import os
 import re
 import subprocess
 import sys
 import yaml
-from .schema import SCHEMA
 
 __version__ = "1.7.0"
 
@@ -67,6 +68,12 @@ class ImageBuilder:
         dirty = subprocess.run(["git", "-C", dir, "diff", "--quiet", "HEAD", "./"]).returncode != 0
         logging.debug(f"Image dir {dir} is dirty")
         return (tree_hash + "-dirty" if dirty else tree_hash, dirty)
+
+    @staticmethod
+    def iso_time() -> str:
+        """Return current ISO 8601 date/time."""
+        today = datetime.now()
+        return today.isoformat()
 
     def get_facts(self) -> None:
         """calculate various facts that can be used in the images.yaml file"""
@@ -125,6 +132,7 @@ class ImageBuilder:
                 "--label", f"org.opencontainers.image.revision={self._facts['commit']}",
                 "--label", f"org.opencontainers.image.user={self._facts['login']}",
                 "--label", f"org.opencontainers.image.buildimage={__version__}",
+                "--label", f"org.opencontainers.image.created={self.iso_time()}",
             ]
             for b in img.get("labels") or []:
                 labels.extend(["--label", f"{b['name']}={b['value'].format(**image_facts)}"])
